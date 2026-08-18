@@ -91,7 +91,7 @@ export default function Analyzer() {
       <section className="text-center">
         <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
           <ShieldCheck className="h-3.5 w-3.5" />
-          Audit con DeepSeek AI
+          Audit con Google Gemini AI
         </div>
         <h1 className="mx-auto max-w-3xl text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           Analizza contratti e documenti di conformità in pochi secondi
@@ -429,6 +429,6 @@ function buildReportText(
   a.clausole_mancanti.forEach((c) => lines.push(`- ${c}`));
   lines.push("", "RACCOMANDAZIONI", "--------------");
   a.consigli_azione.forEach((c, i) => lines.push(`${i + 1}. ${c}`));
-  lines.push("", "Generato da DocuShield con DeepSeek AI.");
+  lines.push("", "Generato da DocuShield con Google Gemini AI.");
   return lines.join("\n");
 }

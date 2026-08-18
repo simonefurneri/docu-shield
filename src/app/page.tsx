@@ -15,7 +15,7 @@ export default function Home() {
             </span>
             <span className="ml-1 hidden items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 sm:inline-flex">
               <ShieldCheck className="h-3 w-3" />
-              Audit con DeepSeek AI
+              Audit con Google Gemini AI
             </span>
           </div>
           <nav className="hidden items-center gap-6 text-sm text-slate-600 sm:flex">
@@ -32,7 +32,7 @@ export default function Home() {
 
       <footer className="border-t border-slate-200 py-6">
         <div className="mx-auto max-w-5xl px-4 text-center text-xs text-slate-400">
-          DocuShield · MVP basato sulle API di DeepSeek. Gli esiti sono generati
+          DocuShield · MVP basato sulle API di Google Gemini. Gli esiti sono generati
           automaticamente e non costituiscono consulenza legale.
         </div>
       </footer>

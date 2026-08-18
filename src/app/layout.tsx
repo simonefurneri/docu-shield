@@ -8,9 +8,9 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "DocuShield — Audit contratti con DeepSeek AI",
+  title: "DocuShield — Audit contratti con Google Gemini AI",
   description:
-    "Analizza contratti e documenti di conformità (NDA, fornitore software, GDPR) con IA via DeepSeek.",
+    "Analizza contratti e documenti di conformità (NDA, fornitore software, GDPR) con IA via Google Gemini.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

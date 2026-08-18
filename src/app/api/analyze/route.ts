@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { analyzeDocument } from "@/lib/deepseek";
+import { analyzeDocument } from "@/lib/gemini";
 import { extractText } from "@/lib/extract";
 import { AnalyzeResponse, CheckType } from "@/lib/types";
 
@@ -86,9 +86,9 @@ export async function POST(req: NextRequest) {
     }, 200);
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
-    // Logga i dettagli (inclusi eventuali body di risposta DeepSeek) solo lato server.
+    // Logga i dettagli solo lato server.
     console.error("[analyze]", raw);
-    const message = raw.includes("DEEPSEEK_API_KEY")
+    const message = raw.includes("GEMINI_API_KEY")
       ? raw
       : "Analisi fallita. Riprova più tardi o controlla la configurazione dell'integrazione AI.";
     return json({ success: false, error: message }, 500);

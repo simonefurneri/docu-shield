@@ -1,13 +1,13 @@
 # DocuShield 🛡️
 
-MVP — Web application B2B per analizzare **contratti e documenti di conformità** (PDF/DOCX) usando le API di **DeepSeek**.
+MVP — Web application B2B per analizzare **contratti e documenti di conformità** (PDF/DOCX) usando le API di **Google Gemini**.
 
 ## Stack
 
 - **Next.js 16** (App Router) + **TypeScript**
 - **Tailwind CSS v4** + **lucide-react**
 - **pdf-parse** (estrazione testo PDF lato server, single-thread tramite pdf.js) + **mammoth** (DOCX)
-- **DeepSeek API** (`deepseek-chat` / `deepseek-reasoner`)
+- **Google Gen AI SDK** (`@google/genai` con `gemini-2.5-flash` / `gemini-2.5-pro`)
 
 ## Struttura
 
@@ -23,7 +23,7 @@ src/
   lib/
     types.ts                 # Tipi condivisi (AnalysisResult, CheckType, ecc.)
     extract.ts               # Estrazione testo PDF/DOCX (pdf.js + mammoth)
-    deepseek.ts              # Client DeepSeek + prompt + parsing JSON
+    gemini.ts                # Client Google Gemini + prompt + parsing JSON
   types/
     pdfjs-worker.d.ts        # Dichiarazione modulo per pdfjs-dist worker
 ```
@@ -35,10 +35,10 @@ src/
    npm install
    ```
 
-2. Crea il file `.env.local` con la tua chiave DeepSeek (vedi `.env.local.example`):
+2. Crea il file `.env.local` con la tua chiave Gemini (vedi `.env.local.example`):
    ```bash
    cp .env.local.example .env.local
-   # DEEPSEEK_API_KEY=sk-...
+   # GEMINI_API_KEY=AIzaSy...
    ```
 
 3. Avvia il server di sviluppo:
@@ -47,7 +47,7 @@ src/
    ```
    Apri `http://localhost:3000`.
 
-4. (Opzionale) Modello DeepSeek: imposta `DEEPSEEK_MODEL=deepseek-reasoner` in `.env.local` per usare la modalità reasoning.
+4. (Opzionale) Modello Gemini: imposta `GEMINI_MODEL=gemini-2.5-pro` in `.env.local` per analisi più complesse o personalizzate.
 
 ## API
 
@@ -83,7 +83,8 @@ Risposta d'errore (4xx/5xx):
 ## Note tecniche
 
 - **pdf-parse v2** usa pdf.js. Per evitare il fallimento del "fake worker" sotto Turbopack, il worker di pdfjs-dist viene importato staticamente e registrato su `globalThis.pdfjsWorker` (single-thread), così `pdf.worker.min.mjs` viene bundle-ato correttamente invece di essere `import()`-ato a runtime.
-- La chiave API DeepSeek viene letta da una variabile d'ambiente lato server: **non è mai esposta al client**.
+- **Google Gen AI**: utilizza lo schema JSON strutturato (`responseMimeType: "application/json"`, `responseSchema`) per garantire risposte formattate e tipizzate.
+- La chiave API Gemini viene letta da una variabile d'ambiente lato server: **non è mai esposta al client**.
 
 ## Verifica
 

@@ -24,7 +24,7 @@ export interface Issue {
   gravita: Severity;
 }
 
-/** Risposta strutturata restituita da DeepSeek. */
+/** Risposta strutturata restituita da Gemini. */
 export interface AnalysisResult {
   score: number; // da 0 a 100
   livello_rischio: RiskLevel;
