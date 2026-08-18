@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeDocument } from "@/lib/gemini";
 import { extractText } from "@/lib/extract";
 import { AnalyzeResponse, CheckType } from "@/lib/types";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -38,6 +40,23 @@ function isAllowedDocx(file: File): boolean {
  */
 export async function POST(req: NextRequest) {
   try {
+    // 1. Verifica Autenticazione con Supabase
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return json(
+        {
+          success: false,
+          error: "Devi effettuare l'accesso per analizzare un documento.",
+          code: "AUTH_REQUIRED",
+        },
+        401
+      );
+    }
+
     const form = await req.formData();
     const file = form.get("file");
     const check = form.get("check")?.toString() ?? "";
@@ -64,25 +83,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Controllo Paywall / Free Tier (1 analisi gratuita)
-    const isPro = req.cookies.get("docushield_pro")?.value === "true";
-    const currentUsage = parseInt(
-      req.cookies.get("docushield_usage_count")?.value ?? "0",
-      10
-    );
+    // 2. Controllo Profilo & Crediti su Supabase
+    const supabaseAdmin = createAdminClient();
+    let { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("credits, is_pro")
+      .eq("id", user.id)
+      .single();
 
-    if (!isPro && currentUsage >= 1) {
+    // Se il profilo non esiste ancora, crealo con 1 credito
+    if (!profile) {
+      const { data: newProfile } = await supabaseAdmin
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email: user.email,
+          credits: 1,
+          is_pro: false,
+        })
+        .select("credits, is_pro")
+        .single();
+      profile = newProfile;
+    }
+
+    const isPro = profile?.is_pro ?? false;
+    let credits = profile?.credits ?? 0;
+
+    // Se l'utente non è pro e non ha crediti, blocca l'analisi
+    if (!isPro && credits <= 0) {
       return json(
         {
           success: false,
           error:
-            "Hai utilizzato la tua analisi gratuita. Effettua l'upgrade per continuare ad analizzare i tuoi documenti.",
+            "Hai esaurito i crediti per le analisi. Effettua l'upgrade o acquista un pacchetto per continuare.",
           code: "UPGRADE_REQUIRED",
+          credits: 0,
+          isPro: false,
         },
-        402
+        403
       );
     }
 
+    // 3. Estrazione testo
     const buffer = Buffer.from(await file.arrayBuffer());
     const { text, empty } = await extractText(buffer);
 
@@ -96,25 +138,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 4. Analisi con Gemini
     const result = await analyzeDocument(check as CheckType, text);
 
-    const response = json({
-      success: true,
-      result,
-      fileName: file.name,
-    }, 200);
-
-    // Se l'utente non è pro, incrementa il contatore di analisi gratuite
+    // 5. Decrementa credito se l'utente non è pro
+    let updatedCredits = credits;
     if (!isPro) {
-      response.cookies.set("docushield_usage_count", String(currentUsage + 1), {
-        httpOnly: false, // accessibile anche da client per sincronizzazione rapida
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 365,
-        path: "/",
-      });
+      updatedCredits = Math.max(0, credits - 1);
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          credits: updatedCredits,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
     }
 
-    return response;
+    return json(
+      {
+        success: true,
+        result,
+        fileName: file.name,
+        credits: updatedCredits,
+        isPro,
+      },
+      200
+    );
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     // Logga i dettagli lato server

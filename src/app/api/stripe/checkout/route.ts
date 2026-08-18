@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe, PLANS_CONFIG, PlanType } from "@/lib/stripe";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     const body = await req.json().catch(() => ({}));
     const plan = (body.plan as PlanType) || "unlimited";
 
@@ -44,8 +50,11 @@ export async function POST(req: NextRequest) {
       mode: config.mode,
       success_url: `${origin}/?unlocked=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/`,
+      client_reference_id: user?.id,
+      customer_email: user?.email,
       metadata: {
         plan,
+        userId: user?.id || "",
       },
     };
 

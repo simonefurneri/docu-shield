@@ -15,8 +15,13 @@ import {
   X,
   ListChecks,
   Lightbulb,
+  LogIn,
+  Zap,
 } from "lucide-react";
 import { AnalysisResult, CHECK_TYPE_OPTIONS, CheckType, Severity } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import Navbar from "@/components/Navbar";
+import AuthModal from "@/components/AuthModal";
 import UpgradeModal from "@/components/UpgradeModal";
 
 type UploadState = "idle" | "loading" | "done" | "error";
@@ -32,22 +37,52 @@ export default function Analyzer() {
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Stripe & Monetization State
-  const [isPro, setIsPro] = useState(false);
-  const [usageCount, setUsageCount] = useState(0);
+  // Supabase Auth & Credits State
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [credits, setCredits] = useState<number>(0);
+  const [isPro, setIsPro] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [unlockedSuccess, setUnlockedSuccess] = useState(false);
 
+  const supabase = createClient();
+
+  // Carica i dati utente e crediti
+  const fetchUserStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/stripe/status");
+      const data = await res.json();
+      if (data.isAuthenticated && data.user) {
+        setUser(data.user);
+        setCredits(data.credits ?? 0);
+        setIsPro(data.isPro ?? false);
+      } else {
+        setUser(null);
+        setCredits(0);
+        setIsPro(false);
+      }
+    } catch {
+      // Ignora errori di fetch
+    }
+  }, []);
+
   useEffect(() => {
     setMounted(true);
+    fetchUserStatus();
 
-    // 1. Controlla se l'utente proviene da un redirect di successo di Stripe
+    // Ascolta cambi di stato auth (login/logout)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      fetchUserStatus();
+    });
+
+    // Controllo redirect di ritorno da Stripe Checkout
     const params = new URLSearchParams(window.location.search);
     const unlocked = params.get("unlocked");
     const sessionId = params.get("session_id");
 
     if (unlocked === "true" && sessionId) {
-      // Valida la sessione lato server
       fetch("/api/stripe/verify-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,9 +91,8 @@ export default function Analyzer() {
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
-            setIsPro(true);
             setUnlockedSuccess(true);
-            // Pulisci l'URL senza ricaricare la pagina
+            fetchUserStatus();
             window.history.replaceState(
               {},
               document.title,
@@ -71,32 +105,10 @@ export default function Analyzer() {
         });
     }
 
-    // 2. Recupera lo stato pro e il conteggio di utilizzo
-    fetch("/api/stripe/status")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.isPro) {
-          setIsPro(true);
-        }
-        if (typeof data.usageCount === "number") {
-          setUsageCount(data.usageCount);
-        } else {
-          // Fallback su localStorage
-          const localCount = parseInt(
-            localStorage.getItem("docushield_usage_count") || "0",
-            10
-          );
-          setUsageCount(localCount);
-        }
-      })
-      .catch(() => {
-        const localCount = parseInt(
-          localStorage.getItem("docushield_usage_count") || "0",
-          10
-        );
-        setUsageCount(localCount);
-      });
-  }, []);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchUserStatus, supabase.auth]);
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -111,7 +123,6 @@ export default function Analyzer() {
     setError("");
     setFile(f);
     setUploadState("idle");
-    // reset result se cambi file dopo un'analisi
     setAnalysis(null);
   }, []);
 
@@ -121,8 +132,14 @@ export default function Analyzer() {
       return;
     }
 
-    // Se l'utente non è pro e ha già usato la sua analisi gratuita, blocca e apri il modale
-    if (!isPro && usageCount >= 1) {
+    // 1. Se non loggato, apri modale di autenticazione
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // 2. Se loggato ma senza crediti e non pro, apri modale di upgrade
+    if (!isPro && credits <= 0) {
       setShowUpgradeModal(true);
       return;
     }
@@ -142,15 +159,27 @@ export default function Analyzer() {
         data = await res.json();
       } catch {
         throw new Error(
-          `Errore del server (${res.status}): risposta non valida. Verifica i log del server o le variabili d'ambiente.`
+          `Errore del server (${res.status}): risposta non valida. Verifica i log o le configurazioni.`
         );
       }
 
-      // Se il backend risponde con paywall richiesto (402)
-      if (res.status === 402 || data?.code === "UPGRADE_REQUIRED") {
+      // Se non autenticato
+      if (res.status === 401 || data?.code === "AUTH_REQUIRED") {
+        setUploadState("idle");
+        setShowAuthModal(true);
+        setError("Effettua l'accesso per analizzare il documento.");
+        return;
+      }
+
+      // Se crediti esauriti
+      if (
+        res.status === 402 ||
+        res.status === 403 ||
+        data?.code === "UPGRADE_REQUIRED"
+      ) {
         setUploadState("idle");
         setShowUpgradeModal(true);
-        setError("Hai utilizzato la tua analisi gratuita. Effettua l'upgrade per continuare.");
+        setError("Crediti esauriti. Effettua l'upgrade per continuare.");
         return;
       }
 
@@ -162,15 +191,11 @@ export default function Analyzer() {
       setFileName(data.fileName ?? file.name);
       setUploadState("done");
 
-      // Se non pro, aggiorna il contatore locale
-      if (!isPro) {
-        const nextUsage = usageCount + 1;
-        setUsageCount(nextUsage);
-        try {
-          localStorage.setItem("docushield_usage_count", String(nextUsage));
-        } catch {
-          // ignora
-        }
+      // Aggiorna crediti residui
+      if (typeof data.credits === "number") {
+        setCredits(data.credits);
+      } else {
+        fetchUserStatus();
       }
     } catch (e) {
       setUploadState("error");
@@ -191,197 +216,240 @@ export default function Analyzer() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:py-16">
-      {/* Banner Sblocco Stripe Riuscito */}
-      {unlockedSuccess && (
-        <div className="mb-8 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shrink-0">
-              <Crown className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="font-semibold">Accesso Pro attivato con successo!</p>
-              <p className="text-xs text-emerald-700">
-                Ora puoi analizzare tutti i tuoi documenti senza limiti.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setUnlockedSuccess(false)}
-            className="text-emerald-600 hover:text-emerald-900 cursor-pointer p-1"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+    <>
+      <Navbar
+        user={user}
+        credits={credits}
+        isPro={isPro}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onOpenUpgrade={() => setShowUpgradeModal(true)}
+        onSignOut={() => {
+          setUser(null);
+          setCredits(0);
+          setIsPro(false);
+        }}
+      />
 
-      {/* ===== Hero ===== */}
-      <section className="text-center">
-        <div className="mx-auto mb-4 flex flex-wrap items-center justify-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Audit con Google Gemini AI
-          </div>
-
-          {isPro ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-              <Crown className="h-3.5 w-3.5" />
-              Piano Pro Attivo
-            </span>
-          ) : (
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:py-16">
+        {/* Banner Sblocco Pagamento */}
+        {unlockedSuccess && (
+          <div className="mb-8 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shrink-0">
+                <Crown className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-semibold">Pagamento completato con successo!</p>
+                <p className="text-xs text-emerald-700">
+                  I tuoi crediti / piano Pro sono stati accreditati sul tuo profilo.
+                </p>
+              </div>
+            </div>
             <button
               type="button"
-              onClick={() => setShowUpgradeModal(true)}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50"
+              onClick={() => setUnlockedSuccess(false)}
+              className="text-emerald-600 hover:text-emerald-900 cursor-pointer p-1"
             >
-              <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-              {usageCount >= 1
-                ? "Analisi gratuita utilizzata · Passa a Pro"
-                : "1 analisi gratuita disponibile"}
+              <X className="h-4 w-4" />
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
-        <h1 className="mx-auto max-w-3xl text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-          Analizza contratti e documenti di conformità in pochi secondi
-        </h1>
-        <p className="mx-auto mt-3 max-w-2xl text-slate-600">
-          Carica un PDF o documento Word, scegli il tipo di controllo e ottieni una
-          valutazione di rischio, le criticità e i consigli operativi generati dall&apos;IA.
-        </p>
-      </section>
+        {/* ===== Hero ===== */}
+        <section className="text-center">
+          <div className="mx-auto mb-4 flex flex-wrap items-center justify-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Audit con Google Gemini AI
+            </div>
 
-      {/* ===== Upload form ===== */}
-      <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <div className="grid gap-6 sm:grid-cols-2">
-          {/* Drag & drop */}
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDrag(true);
-            }}
-            onDragLeave={() => setDrag(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDrag(false);
-              onFiles(e.dataTransfer.files);
-            }}
-            onClick={() => inputRef.current?.click()}
-            className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
-              drag
-                ? "border-indigo-500 bg-indigo-50"
-                : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"
-            }`}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              className="hidden"
-              onChange={(e) => onFiles(e.target.files)}
-              suppressHydrationWarning
-            />
-            {file ? (
-              <>
-                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <FileText className="h-5 w-5 text-indigo-600" />
-                  <span className="max-w-[220px] truncate text-sm font-medium text-slate-800">
-                    {file.name}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Rimuovi file"
-                    className="cursor-pointer text-slate-400 transition-colors hover:text-red-500"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFile(null);
-                      setAnalysis(null);
-                      setUploadState("idle");
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500">Clicca o rilascia per sostituire il file</p>
-              </>
+            {user ? (
+              isPro ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                  <Crown className="h-3.5 w-3.5 text-amber-600" />
+                  Piano Pro Illimitato
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50"
+                >
+                  <Zap className="h-3.5 w-3.5 text-indigo-600" />
+                  {credits > 0
+                    ? `Hai ${credits} ${credits === 1 ? "analisi disponibile" : "analisi disponibili"}`
+                    : "Crediti esauriti · Ricarica"}
+                </button>
+              )
             ) : (
-              <>
-                <UploadCloud className="h-10 w-10 text-indigo-500" />
-                <div>
-                  <p className="text-sm font-medium text-slate-700">
-                    Trascina qui il documento
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    oppure clicca per selezionarlo · PDF o DOCX (max 10 MB)
-                  </p>
-                </div>
-              </>
+              <button
+                type="button"
+                onClick={() => setShowAuthModal(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                1 analisi gratuita alla registrazione
+              </button>
             )}
           </div>
 
-          {/* Controls */}
-          <div className="flex flex-col gap-4">
-            <div>
-              <label
-                htmlFor="check-type"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
-              >
-                Tipo di controllo
-              </label>
-              <select
-                id="check-type"
-                value={checkType}
-                onChange={(e) => setCheckType(e.target.value as CheckType)}
-                className="w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-              >
-                {CHECK_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <h1 className="mx-auto max-w-3xl text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+            Analizza contratti e documenti di conformità in pochi secondi
+          </h1>
+          <p className="mx-auto mt-3 max-w-2xl text-slate-600">
+            Carica un PDF o documento Word, scegli il tipo di controllo e ottieni una
+            valutazione di rischio, le criticità e i consigli operativi generati dall&apos;IA.
+          </p>
+        </section>
 
-            <button
-              type="button"
-              onClick={handleAnalyze}
-              disabled={!mounted || uploadState === "loading" || !file}
-              suppressHydrationWarning
-              className="mt-auto inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+        {/* ===== Upload form ===== */}
+        <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {/* Drag & drop */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrag(false);
+                onFiles(e.dataTransfer.files);
+              }}
+              onClick={() => inputRef.current?.click()}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+                drag
+                  ? "border-indigo-500 bg-indigo-50"
+                  : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"
+              }`}
             >
-              {uploadState === "loading" ? (
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={(e) => onFiles(e.target.files)}
+                suppressHydrationWarning
+              />
+              {file ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Analisi in corso…
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <FileText className="h-5 w-5 text-indigo-600" />
+                    <span className="max-w-[220px] truncate text-sm font-medium text-slate-800">
+                      {file.name}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Rimuovi file"
+                      className="cursor-pointer text-slate-400 transition-colors hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFile(null);
+                        setAnalysis(null);
+                        setUploadState("idle");
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">Clicca o rilascia per sostituire il file</p>
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="h-4 w-4" />
-                  Analizza Documento
+                  <UploadCloud className="h-10 w-10 text-indigo-500" />
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">
+                      Trascina qui il documento
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      oppure clicca per selezionarlo · PDF o DOCX (max 10 MB)
+                    </p>
+                  </div>
                 </>
               )}
-            </button>
+            </div>
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{error}</span>
+            {/* Controls */}
+            <div className="flex flex-col gap-4">
+              <div>
+                <label
+                  htmlFor="check-type"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Tipo di controllo
+                </label>
+                <select
+                  id="check-type"
+                  value={checkType}
+                  onChange={(e) => setCheckType(e.target.value as CheckType)}
+                  className="w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                >
+                  {CHECK_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+
+              <button
+                type="button"
+                onClick={handleAnalyze}
+                disabled={!mounted || uploadState === "loading" || !file}
+                suppressHydrationWarning
+                className="mt-auto inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {uploadState === "loading" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Analisi in corso…
+                  </>
+                ) : !user ? (
+                  <>
+                    <LogIn className="h-4 w-4" />
+                    Accedi per Analizzare
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4" />
+                    Analizza Documento
+                  </>
+                )}
+              </button>
+
+              {error && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
           </div>
+        </section>
+
+        {/* ===== Results ===== */}
+        {analysis && <ResultsView analysis={analysis} fileName={fileName} onExport={handleExport} />}
+
+        {/* Modali */}
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+        />
+
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+        />
+      </main>
+
+      <footer className="border-t border-slate-200 py-6">
+        <div className="mx-auto max-w-5xl px-4 text-center text-xs text-slate-400">
+          DocuShield · Piattaforma B2B con AI & PostgreSQL. Gli esiti sono generati
+          automaticamente e non costituiscono consulenza legale vincolante.
         </div>
-      </section>
-
-      {/* ===== Results ===== */}
-      {analysis && <ResultsView analysis={analysis} fileName={fileName} onExport={handleExport} />}
-
-      {/* Upgrade Modal */}
-      <UpgradeModal
-        isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-      />
-    </main>
+      </footer>
+    </>
   );
 }
 
@@ -556,7 +624,6 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-/* Genera un report testuale semplice per l'esportazione. */
 function buildReportText(
   fileName: string,
   checkType: CheckType,

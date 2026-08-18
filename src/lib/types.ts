@@ -40,7 +40,9 @@ export interface AnalyzeResponse {
   result?: AnalysisResult;
   fileName?: string;
   error?: string;
-  code?: "UPGRADE_REQUIRED";
+  code?: "UPGRADE_REQUIRED" | "AUTH_REQUIRED";
+  credits?: number;
+  isPro?: boolean;
 }
 
 /** Etichette leggibili per i tipi di controllo. */
