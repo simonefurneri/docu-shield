@@ -1,14 +1,5 @@
-import * as pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs";
-import { PDFParse } from "pdf-parse";
+import { extractText as unpdfExtractText, getDocumentProxy } from "unpdf";
 import mammoth from "mammoth";
-
-// PDF.js, quando eseguito in un bundler (Turbopack/Next.js), tenta di caricare il
-// proprio worker con un `import()` dinamico del path, che il bundler non risolve.
-// Registriamo il WorkerMessageHandler sul global *staticamente*: in tal modo
-// PDF.js usa il "fake worker" in single-thread senza alcuna importazione dinamica,
-// il che funziona in modo affidabile nelle route server di Next.js.
-const g = globalThis as unknown as { pdfjsWorker?: typeof pdfjsWorker };
-g.pdfjsWorker = g.pdfjsWorker ?? pdfjsWorker;
 
 export type ExtractedText = {
   text: string;
@@ -18,28 +9,23 @@ export type ExtractedText = {
 
 /**
  * Estrae il testo grezzo da un documento PDF o DOCX.
- * - PDF: via pdf-parse v2 (pdf.js single-thread)
+ * - PDF: via unpdf (serverless/edge-ready PDF text extractor, compatibile Vercel)
  * - DOCX: via mammoth (estrazione da Buffer senza file system)
  */
-export async function extractText(
-  file: Buffer
-): Promise<ExtractedText> {
+export async function extractText(file: Buffer): Promise<ExtractedText> {
   let text = "";
 
   if (isPdf(file)) {
-    const parser = new PDFParse({ data: file });
-    try {
-      const result = await parser.getText();
-      text = result.text ?? "";
-    } finally {
-      await parser.destroy();
-    }
+    const uint8Array = new Uint8Array(file);
+    const pdf = await getDocumentProxy(uint8Array);
+    const result = await unpdfExtractText(pdf, { mergePages: true });
+    text = Array.isArray(result.text) ? result.text.join("\n") : (result.text ?? "");
   } else if (isDocx(file)) {
-    // gestione DOCX (OOXML) via mammoth, da Buffer senza file system
+    // Gestione DOCX (OOXML) via mammoth da Buffer
     const result = await mammoth.extractRawText({ buffer: file });
     text = result.value ?? "";
   } else {
-    // fallback: prova comunque come DOCX/OOXML (es. mime non affidabile)
+    // Fallback: prova comunque come DOCX/OOXML
     try {
       const result = await mammoth.extractRawText({ buffer: file });
       text = result.value ?? "";

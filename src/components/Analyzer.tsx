@@ -65,9 +65,16 @@ export default function Analyzer() {
 
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: form });
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          `Errore del server (${res.status}): risposta non valida. Verifica i log del server o le variabili d'ambiente.`
+        );
+      }
       if (!res.ok) {
-        throw new Error(data.error ?? "Errore durante l'analisi.");
+        throw new Error(data?.error ?? "Errore durante l'analisi.");
       }
       setAnalysis(data.result);
       setFileName(data.fileName ?? file.name);

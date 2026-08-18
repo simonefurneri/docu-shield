@@ -6,7 +6,7 @@ MVP â€” Web application B2B per analizzare **contratti e documenti di conformitÃ
 
 - **Next.js 16** (App Router) + **TypeScript**
 - **Tailwind CSS v4** + **lucide-react**
-- **pdf-parse** (estrazione testo PDF lato server, single-thread tramite pdf.js) + **mammoth** (DOCX)
+- **unpdf** (estrazione testo PDF serverless/edge-ready per Vercel/Node.js) + **mammoth** (DOCX)
 - **Google Gen AI SDK** (`@google/genai` con `gemini-3.6-flash` / `gemini-3.6-pro`)
 
 ## Struttura
@@ -22,10 +22,8 @@ src/
     Analyzer.tsx             # Upload + risultati (client)
   lib/
     types.ts                 # Tipi condivisi (AnalysisResult, CheckType, ecc.)
-    extract.ts               # Estrazione testo PDF/DOCX (pdf.js + mammoth)
+    extract.ts               # Estrazione testo PDF/DOCX (unpdf + mammoth)
     gemini.ts                # Client Google Gemini + prompt + parsing JSON
-  types/
-    pdfjs-worker.d.ts        # Dichiarazione modulo per pdfjs-dist worker
 ```
 
 ## Configurazione
