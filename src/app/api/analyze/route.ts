@@ -86,11 +86,23 @@ export async function POST(req: NextRequest) {
     }, 200);
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
-    // Logga i dettagli solo lato server.
+    // Logga i dettagli lato server
     console.error("[analyze]", raw);
-    const message = raw.includes("GEMINI_API_KEY")
-      ? raw
-      : "Analisi fallita. Riprova più tardi o controlla la configurazione dell'integrazione AI.";
+
+    let message = "Analisi fallita. Riprova più tardi o controlla la configurazione dell'integrazione AI.";
+    if (raw.includes("GEMINI_API_KEY")) {
+      message = "Chiave API Gemini mancante o non valida. Configura GEMINI_API_KEY nelle impostazioni.";
+    } else if (
+      raw.includes("503") ||
+      raw.includes("high demand") ||
+      raw.includes("UNAVAILABLE") ||
+      raw.includes("overloaded")
+    ) {
+      message = "I server di Google AI sono temporaneamente sovraccarichi per picchi di traffico. Riprova tra qualche secondo.";
+    } else if (raw.includes("429") || raw.includes("RESOURCE_EXHAUSTED")) {
+      message = "Raggiunto il limite di richieste API su Google Gemini. Riprova tra poco.";
+    }
+
     return json({ success: false, error: message }, 500);
   }
 }

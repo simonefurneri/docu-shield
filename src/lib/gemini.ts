@@ -116,7 +116,29 @@ function normalizeResult(parsed: Record<string, unknown>, raw: string): Analysis
   };
 }
 
-/** Chiama l'API Google Gemini con schema JSON strutturato per analizzare il testo del documento. */
+/** Verifica se l'errore è dovuto a sovraccarico temporaneo, rate limit o indisponibilità del modello */
+function isTransientError(err: unknown): boolean {
+  const str = String(err).toLowerCase();
+  return (
+    str.includes("503") ||
+    str.includes("429") ||
+    str.includes("unavailable") ||
+    str.includes("high demand") ||
+    str.includes("overloaded") ||
+    str.includes("resource_exhausted") ||
+    str.includes("try again later") ||
+    str.includes("fetch failed") ||
+    str.includes("socket") ||
+    str.includes("timeout")
+  );
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Chiama l'API Google Gemini con schema JSON strutturato, retry esponenziale
+ * e fallback automatico tra modelli in caso di picchi di carico (503 / 429).
+ */
 export async function analyzeDocument(
   checkType: CheckType,
   documentText: string
@@ -129,73 +151,112 @@ export async function analyzeDocument(
     );
   }
 
-  const model = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
-  const ai = new GoogleGenAI({ apiKey });
+  const primaryModel = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
+  // Modelli candidati in ordine di preferenza per il fallback
+  const fallbackCandidates = [
+    primaryModel,
+    "gemini-3.6-flash",
+    "gemini-3.6-pro",
+    "gemini-2.5-pro",
+  ];
+  // Rimuovi duplicati preservando l'ordine
+  const modelsToTry = Array.from(new Set(fallbackCandidates));
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: buildPrompt(checkType, documentText),
-    config: {
-      systemInstruction:
-        "Sei un esperto analista di contratti e conformità legale. Rispondi esclusivamente in formato JSON valido e strutturato secondo lo schema specificato.",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          score: {
-            type: Type.INTEGER,
-            description: "Punteggio di conformità e sicurezza contrattuale da 0 a 100",
-          },
-          livello_rischio: {
-            type: Type.STRING,
-            enum: ["Basso", "Medio", "Alto"],
-          },
-          riassunto: {
-            type: Type.STRING,
-            description: "Riassunto dell'analisi del documento",
-          },
-          criticita: {
-            type: Type.ARRAY,
-            items: {
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = buildPrompt(checkType, documentText);
+
+  let lastError: unknown = null;
+
+  for (const model of modelsToTry) {
+    const maxRetries = 2; // 2 tentativi per modello con backoff
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction:
+              "Sei un esperto analista di contratti e conformità legale. Rispondi esclusivamente in formato JSON valido e strutturato secondo lo schema specificato.",
+            responseMimeType: "application/json",
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                sezione: { type: Type.STRING },
-                problema: { type: Type.STRING },
-                gravita: {
+                score: {
+                  type: Type.INTEGER,
+                  description: "Punteggio di conformità e sicurezza contrattuale da 0 a 100",
+                },
+                livello_rischio: {
                   type: Type.STRING,
-                  enum: ["Alta", "Media", "Bassa"],
+                  enum: ["Basso", "Medio", "Alto"],
+                },
+                riassunto: {
+                  type: Type.STRING,
+                  description: "Riassunto dell'analisi del documento",
+                },
+                criticita: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      sezione: { type: Type.STRING },
+                      problema: { type: Type.STRING },
+                      gravita: {
+                        type: Type.STRING,
+                        enum: ["Alta", "Media", "Bassa"],
+                      },
+                    },
+                    required: ["sezione", "problema", "gravita"],
+                  },
+                },
+                clausole_mancanti: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                consigli_azione: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
                 },
               },
-              required: ["sezione", "problema", "gravita"],
+              required: [
+                "score",
+                "livello_rischio",
+                "riassunto",
+                "criticita",
+                "clausole_mancanti",
+                "consigli_azione",
+              ],
             },
+            temperature: 0.1,
           },
-          clausole_mancanti: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-          consigli_azione: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-        },
-        required: [
-          "score",
-          "livello_rischio",
-          "riassunto",
-          "criticita",
-          "clausole_mancanti",
-          "consigli_azione",
-        ],
-      },
-      temperature: 0.1,
-    },
-  });
+        });
 
-  const content = response.text;
+        const content = response.text;
+        if (typeof content !== "string" || content.trim().length === 0) {
+          throw new Error("Gemini non ha restituito alcun contenuto");
+        }
 
-  if (typeof content !== "string" || content.trim().length === 0) {
-    throw new Error("Gemini non ha restituito alcun contenuto");
+        return parseAssistantJson(content);
+      } catch (err) {
+        lastError = err;
+        console.warn(
+          `[gemini] Tentativo ${attempt}/${maxRetries} fallito con modello ${model}:`,
+          err instanceof Error ? err.message : err
+        );
+
+        if (!isTransientError(err)) {
+          // Errore non transitorio (es. auth o prompt invalido), non ha senso ritentare
+          throw err;
+        }
+
+        if (attempt < maxRetries) {
+          // Backoff esponenziale + piccolo jitter (1.2s, 2.4s...)
+          const delay = attempt * 1200 + Math.random() * 400;
+          await sleep(delay);
+        }
+      }
+    }
   }
 
-  return parseAssistantJson(content);
+  // Se tutti i modelli e tentativi sono falliti
+  throw lastError ?? new Error("Tutti i tentativi di analisi con Gemini sono falliti.");
 }
