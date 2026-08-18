@@ -7,7 +7,7 @@ MVP — Web application B2B per analizzare **contratti e documenti di conformit�
 - **Next.js 16** (App Router) + **TypeScript**
 - **Tailwind CSS v4** + **lucide-react**
 - **pdf-parse** (estrazione testo PDF lato server, single-thread tramite pdf.js) + **mammoth** (DOCX)
-- **Google Gen AI SDK** (`@google/genai` con `gemini-2.5-flash` / `gemini-2.5-pro`)
+- **Google Gen AI SDK** (`@google/genai` con `gemini-3.6-flash` / `gemini-3.6-pro`)
 
 ## Struttura
 
@@ -47,7 +47,7 @@ src/
    ```
    Apri `http://localhost:3000`.
 
-4. (Opzionale) Modello Gemini: imposta `GEMINI_MODEL=gemini-2.5-pro` in `.env.local` per analisi più complesse o personalizzate.
+4. (Opzionale) Modello Gemini: imposta `GEMINI_MODEL=gemini-3.6-pro` in `.env.local` per analisi più complesse o personalizzate.
 
 ## API
 

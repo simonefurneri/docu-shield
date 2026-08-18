@@ -17,3 +17,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, Arial, sans-serif;
 }
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+select {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}

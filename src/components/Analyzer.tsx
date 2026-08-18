@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -19,6 +19,7 @@ import { AnalysisResult, CHECK_TYPE_OPTIONS, CheckType, Severity } from "@/lib/t
 type UploadState = "idle" | "loading" | "done" | "error";
 
 export default function Analyzer() {
+  const [mounted, setMounted] = useState(false);
   const [drag, setDrag] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [checkType, setCheckType] = useState<CheckType>("NDA");
@@ -27,6 +28,10 @@ export default function Analyzer() {
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -130,6 +135,7 @@ export default function Analyzer() {
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               className="hidden"
               onChange={(e) => onFiles(e.target.files)}
+              suppressHydrationWarning
             />
             {file ? (
               <>
@@ -141,7 +147,7 @@ export default function Analyzer() {
                   <button
                     type="button"
                     aria-label="Rimuovi file"
-                    className="text-slate-400 hover:text-red-500"
+                    className="cursor-pointer text-slate-400 transition-colors hover:text-red-500"
                     onClick={(e) => {
                       e.stopPropagation();
                       setFile(null);
@@ -182,7 +188,7 @@ export default function Analyzer() {
                 id="check-type"
                 value={checkType}
                 onChange={(e) => setCheckType(e.target.value as CheckType)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                className="w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
               >
                 {CHECK_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -195,8 +201,9 @@ export default function Analyzer() {
             <button
               type="button"
               onClick={handleAnalyze}
-              disabled={uploadState === "loading" || !file}
-              className="mt-auto inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!mounted || uploadState === "loading" || !file}
+              suppressHydrationWarning
+              className="mt-auto inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {uploadState === "loading" ? (
                 <>
@@ -262,7 +269,7 @@ function ResultsView({
         <button
           type="button"
           onClick={onExport}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
         >
           <Download className="h-4 w-4" />
           Esporta Report
@@ -321,7 +328,9 @@ function ResultsView({
               <li key={i} className="grid gap-2 px-6 py-4 sm:grid-cols-[140px_1fr_auto]">
                 <div className="text-sm font-medium text-slate-700">{c.sezione}</div>
                 <div className="text-sm text-slate-600">{c.problema}</div>
-                <span className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold ${gravitaStyle[c.gravita]}`}>
+                <span
+                  className={`inline-flex w-fit items-center justify-center rounded-full px-2.5 py-0.5 text-center text-xs font-semibold ${gravitaStyle[c.gravita]}`}
+                >
                   {c.gravita}
                 </span>
               </li>
