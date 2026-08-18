@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Crown,
   Download,
   FileText,
   Loader2,
   ShieldCheck,
+  Sparkles,
   TriangleAlert,
   UploadCloud,
   X,
@@ -15,6 +17,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { AnalysisResult, CHECK_TYPE_OPTIONS, CheckType, Severity } from "@/lib/types";
+import UpgradeModal from "@/components/UpgradeModal";
 
 type UploadState = "idle" | "loading" | "done" | "error";
 
@@ -29,8 +32,70 @@ export default function Analyzer() {
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Stripe & Monetization State
+  const [isPro, setIsPro] = useState(false);
+  const [usageCount, setUsageCount] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [unlockedSuccess, setUnlockedSuccess] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+
+    // 1. Controlla se l'utente proviene da un redirect di successo di Stripe
+    const params = new URLSearchParams(window.location.search);
+    const unlocked = params.get("unlocked");
+    const sessionId = params.get("session_id");
+
+    if (unlocked === "true" && sessionId) {
+      // Valida la sessione lato server
+      fetch("/api/stripe/verify-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            setIsPro(true);
+            setUnlockedSuccess(true);
+            // Pulisci l'URL senza ricaricare la pagina
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("Errore verifica sessione Stripe:", err);
+        });
+    }
+
+    // 2. Recupera lo stato pro e il conteggio di utilizzo
+    fetch("/api/stripe/status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.isPro) {
+          setIsPro(true);
+        }
+        if (typeof data.usageCount === "number") {
+          setUsageCount(data.usageCount);
+        } else {
+          // Fallback su localStorage
+          const localCount = parseInt(
+            localStorage.getItem("docushield_usage_count") || "0",
+            10
+          );
+          setUsageCount(localCount);
+        }
+      })
+      .catch(() => {
+        const localCount = parseInt(
+          localStorage.getItem("docushield_usage_count") || "0",
+          10
+        );
+        setUsageCount(localCount);
+      });
   }, []);
 
   const onFiles = useCallback((files: FileList | null) => {
@@ -55,6 +120,13 @@ export default function Analyzer() {
       setError("Seleziona un documento da analizzare.");
       return;
     }
+
+    // Se l'utente non è pro e ha già usato la sua analisi gratuita, blocca e apri il modale
+    if (!isPro && usageCount >= 1) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
     setError("");
     setUploadState("loading");
     setAnalysis(null);
@@ -73,12 +145,33 @@ export default function Analyzer() {
           `Errore del server (${res.status}): risposta non valida. Verifica i log del server o le variabili d'ambiente.`
         );
       }
+
+      // Se il backend risponde con paywall richiesto (402)
+      if (res.status === 402 || data?.code === "UPGRADE_REQUIRED") {
+        setUploadState("idle");
+        setShowUpgradeModal(true);
+        setError("Hai utilizzato la tua analisi gratuita. Effettua l'upgrade per continuare.");
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(data?.error ?? "Errore durante l'analisi.");
       }
+
       setAnalysis(data.result);
       setFileName(data.fileName ?? file.name);
       setUploadState("done");
+
+      // Se non pro, aggiorna il contatore locale
+      if (!isPro) {
+        const nextUsage = usageCount + 1;
+        setUsageCount(nextUsage);
+        try {
+          localStorage.setItem("docushield_usage_count", String(nextUsage));
+        } catch {
+          // ignora
+        }
+      }
     } catch (e) {
       setUploadState("error");
       setError(e instanceof Error ? e.message : "Errore sconosciuto.");
@@ -99,12 +192,57 @@ export default function Analyzer() {
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:py-16">
+      {/* Banner Sblocco Stripe Riuscito */}
+      {unlockedSuccess && (
+        <div className="mb-8 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shrink-0">
+              <Crown className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold">Accesso Pro attivato con successo!</p>
+              <p className="text-xs text-emerald-700">
+                Ora puoi analizzare tutti i tuoi documenti senza limiti.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUnlockedSuccess(false)}
+            className="text-emerald-600 hover:text-emerald-900 cursor-pointer p-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* ===== Hero ===== */}
       <section className="text-center">
-        <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Audit con Google Gemini AI
+        <div className="mx-auto mb-4 flex flex-wrap items-center justify-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Audit con Google Gemini AI
+          </div>
+
+          {isPro ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <Crown className="h-3.5 w-3.5" />
+              Piano Pro Attivo
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowUpgradeModal(true)}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+              {usageCount >= 1
+                ? "Analisi gratuita utilizzata · Passa a Pro"
+                : "1 analisi gratuita disponibile"}
+            </button>
+          )}
         </div>
+
         <h1 className="mx-auto max-w-3xl text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           Analizza contratti e documenti di conformità in pochi secondi
         </h1>
@@ -237,6 +375,12 @@ export default function Analyzer() {
 
       {/* ===== Results ===== */}
       {analysis && <ResultsView analysis={analysis} fileName={fileName} onExport={handleExport} />}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </main>
   );
 }

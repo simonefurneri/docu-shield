@@ -40,6 +40,7 @@ export interface AnalyzeResponse {
   result?: AnalysisResult;
   fileName?: string;
   error?: string;
+  code?: "UPGRADE_REQUIRED";
 }
 
 /** Etichette leggibili per i tipi di controllo. */

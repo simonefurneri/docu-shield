@@ -64,6 +64,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Controllo Paywall / Free Tier (1 analisi gratuita)
+    const isPro = req.cookies.get("docushield_pro")?.value === "true";
+    const currentUsage = parseInt(
+      req.cookies.get("docushield_usage_count")?.value ?? "0",
+      10
+    );
+
+    if (!isPro && currentUsage >= 1) {
+      return json(
+        {
+          success: false,
+          error:
+            "Hai utilizzato la tua analisi gratuita. Effettua l'upgrade per continuare ad analizzare i tuoi documenti.",
+          code: "UPGRADE_REQUIRED",
+        },
+        402
+      );
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const { text, empty } = await extractText(buffer);
 
@@ -79,11 +98,23 @@ export async function POST(req: NextRequest) {
 
     const result = await analyzeDocument(check as CheckType, text);
 
-    return json({
+    const response = json({
       success: true,
       result,
       fileName: file.name,
     }, 200);
+
+    // Se l'utente non è pro, incrementa il contatore di analisi gratuite
+    if (!isPro) {
+      response.cookies.set("docushield_usage_count", String(currentUsage + 1), {
+        httpOnly: false, // accessibile anche da client per sincronizzazione rapida
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 365,
+        path: "/",
+      });
+    }
+
+    return response;
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     // Logga i dettagli lato server

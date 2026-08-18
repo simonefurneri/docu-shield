@@ -43,9 +43,25 @@ src/
    ```bash
    npm run dev
    ```
-   Apri `http://localhost:3000`.
 
-4. (Opzionale) Modello Gemini: imposta `GEMINI_MODEL=gemini-3.6-pro` in `.env.local` per analisi più complesse o personalizzate.
+4. Configura le variabili Stripe in `.env.local`:
+   ```bash
+   STRIPE_SECRET_KEY=sk_test_...
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+   ```
+
+5. (Opzionale) Modello Gemini: imposta `GEMINI_MODEL=gemini-3.6-pro` in `.env.local` per analisi più complesse o personalizzate.
+
+## Monetizzazione & Stripe
+
+- **Free Tier**: 1 analisi gratuita per browser/sessione (tracciata tramite cookie sicuro e localStorage).
+- **Upgrade Modal**: Si attiva al secondo tentativo di analisi, offrendo:
+  - **Pacchetto 5 Analisi**: 15€ una tantum (`mode: 'payment'`).
+  - **Piano Illimitato**: 29€/mese abbonamento ricorrente (`mode: 'subscription'`).
+- **Endpoint Stripe**:
+  - `POST /api/stripe/checkout`: genera la sessione di pagamento Stripe Checkout.
+  - `POST /api/stripe/verify-session`: convalida la sessione dopo il redirect e imposta il cookie HTTP-only `docushield_pro=true`.
+  - `GET /api/stripe/status`: restituisce lo stato Pro e il numero di analisi effettuate.
 
 ## API
 
