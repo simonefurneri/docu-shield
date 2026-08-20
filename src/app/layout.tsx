@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   title: "DocuShield — Audit contratti con Google Gemini AI",
   description:
     "Analizza contratti e documenti di conformità (NDA, fornitore software, GDPR) con IA via Google Gemini.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <!-- Gradiente brand DocuShield Indigo -->
+    <linearGradient id="docuShieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#4338ca" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sfondo arrotondato in stile App Icon -->
+  <rect width="32" height="32" rx="8" fill="url(#docuShieldGrad)" />
+
+  <!-- Foglio / Documento con piega in alto a destra -->
+  <!-- Sagoma foglio -->
+  <path
+    d="M7.5 7A1.5 1.5 0 0 1 9 5.5H18L23.5 11V23.5A1.5 1.5 0 0 1 22 25H9A1.5 1.5 0 0 1 7.5 23.5V7Z"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Angolo piegato del foglio -->
+  <path
+    d="M17.5 5.5V11.5H23.5"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Righe di testo del documento -->
+  <line x1="11" y1="11.5" x2="14.5" y2="11.5" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.85" />
+  <line x1="11" y1="15.5" x2="14" y2="15.5" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.85" />
+
+  <!-- Scudo di sicurezza / audit in primo piano a destra (con sfondo solido indaco scuro per staccare dal foglio) -->
+  <path
+    d="M21 16.5C21 16.5 23.8 17.3 25 17.5C25 21.5 23.2 24.8 21 26.5C18.8 24.8 17 21.5 17 17.5C18.2 17.3 21 16.5 21 16.5Z"
+    fill="#3730a3"
+    stroke="#ffffff"
+    stroke-width="1.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Spunta di verifica / audit dentro lo scudo -->
+  <path
+    d="M19.2 21.2L20.4 22.4L22.8 19.8"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="1.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Scintilla / AI Sparkle in alto a sinistra del documento -->
+  <path
+    d="M11 5.5C11 7.2 12.2 8.5 12.2 8.5C12.2 8.5 11 9.8 11 11.5C11 9.8 9.8 8.5 9.8 8.5C9.8 8.5 11 7.2 11 5.5Z"
+    fill="#ffffff"
+    opacity="0.95"
+  />
+</svg>
