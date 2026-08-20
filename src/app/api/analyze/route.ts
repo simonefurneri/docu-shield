@@ -4,6 +4,7 @@ import { extractText } from "@/lib/extract";
 import { AnalyzeResponse, CheckType } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendTelegramAlert } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,6 +40,8 @@ function isAllowedDocx(file: File): boolean {
  *   - check:  il tipo di controllo (NDA | SOFTWARE_SUPPLIER_CONTRACT | GDPR_COMPLIANCE)
  */
 export async function POST(req: NextRequest) {
+  let userEmail = "Non autenticato";
+
   try {
     // 1. Verifica Autenticazione con Supabase
     const supabase = await createClient();
@@ -56,6 +59,8 @@ export async function POST(req: NextRequest) {
         401
       );
     }
+
+    userEmail = user.email || "Utente senza email";
 
     const form = await req.formData();
     const file = form.get("file");
@@ -154,6 +159,11 @@ export async function POST(req: NextRequest) {
         .eq("id", user.id);
     }
 
+    // Alert Telegram: Nuovo Audit Completato
+    await sendTelegramAlert(
+      `📄 *Nuovo Audit Completato!*\n• *Documento:* ${check}\n• *Score:* ${result.score}/100\n• *Rischio:* ${result.livello_rischio}\n• *Utente:* ${userEmail}`
+    );
+
     return json(
       {
         success: true,
@@ -182,6 +192,11 @@ export async function POST(req: NextRequest) {
     } else if (raw.includes("429") || raw.includes("RESOURCE_EXHAUSTED")) {
       message = "Raggiunto il limite di richieste API su Google Gemini. Riprova tra poco.";
     }
+
+    // Alert Telegram: Errore Analisi DocuShield
+    await sendTelegramAlert(
+      `🚨 *Errore Analisi DocuShield*\n• *Dettaglio:* ${message}\n• *Utente:* ${userEmail}`
+    );
 
     return json({ success: false, error: message }, 500);
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendTelegramAlert } from "@/lib/telegram";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -47,6 +48,13 @@ export async function POST(req: NextRequest) {
         const userId =
           session.client_reference_id || session.metadata?.userId;
         const mode = session.mode;
+        const customerEmail =
+          session.customer_details?.email ||
+          session.customer_email ||
+          "Email non disponibile";
+        const amount = session.amount_total ? session.amount_total / 100 : 0;
+        const purchaseType =
+          mode === "payment" ? "Pacchetto Crediti" : "Abbonamento PRO";
 
         if (!userId) {
           console.warn(
@@ -103,6 +111,12 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", userId);
         }
+
+        // Alert Telegram: Nuovo Pagamento Ricevuto
+        await sendTelegramAlert(
+          `💰 *Nuovo Pagamento Ricevuto!*\n• *Tipo:* ${purchaseType}\n• *Importo:* ${amount} €\n• *Cliente:* ${customerEmail}`
+        );
+
         break;
       }
 
@@ -113,17 +127,45 @@ export async function POST(req: NextRequest) {
             ? subscription.customer
             : subscription.customer?.id;
 
+        let customerEmail = "Email non disponibile";
+
         if (customerId) {
           console.log(
             `[stripe-webhook] Cancellazione abbonamento per customer: ${customerId}`
           );
-          await supabaseAdmin
+          const { data: profile } = await supabaseAdmin
             .from("profiles")
             .update({
               is_pro: false,
               updated_at: new Date().toISOString(),
             })
-            .eq("stripe_customer_id", customerId);
+            .eq("stripe_customer_id", customerId)
+            .select("email")
+            .single();
+
+          if (profile?.email) {
+            customerEmail = profile.email;
+          } else {
+            // Tentativo di recupero email da Stripe
+            try {
+              const stripe = getStripe();
+              const stripeCustomer = await stripe.customers.retrieve(customerId);
+              if ("email" in stripeCustomer && stripeCustomer.email) {
+                customerEmail = stripeCustomer.email;
+              }
+            } catch (stripeErr) {
+              console.warn(
+                "[stripe-webhook] Impossibile recuperare email da Stripe per customer:",
+                customerId,
+                stripeErr
+              );
+            }
+          }
+
+          // Alert Telegram: Abbonamento Cancellato
+          await sendTelegramAlert(
+            `⚠️ *Abbonamento Cancellato*\n• *Cliente:* ${customerEmail}`
+          );
         }
         break;
       }
