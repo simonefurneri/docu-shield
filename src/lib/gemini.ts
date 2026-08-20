@@ -152,12 +152,15 @@ export async function analyzeDocument(
   }
 
   const primaryModel = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
-  // Modelli candidati in ordine di preferenza per il fallback
+  // Modelli candidati in ordine DECRESCENTE di performance disponibili nel Free Tier di Google AI Studio
   const fallbackCandidates = [
     primaryModel,
-    "gemini-3.6-flash",
-    "gemini-3.6-pro",
-    "gemini-2.5-pro",
+    "gemini-3.6-flash",          // Modello di punta Flash (massima qualità/ragionamento)
+    "gemini-3.5-flash",          // Modello ad alta capacità per workflow complessi
+    "gemini-3-flash-preview",    // Modello Flash serie 3 con capacità multimodali e reasoning
+    "gemini-3.5-flash-lite",     // Modello lightweight veloce serie 3.5
+    "gemini-3.1-flash-lite",     // Modello ultra rapido a bassa latenza
+    "gemini-flash-latest",       // Alias dinamico all'ultimo modello Flash stabile
   ];
   // Rimuovi duplicati preservando l'ordine
   const modelsToTry = Array.from(new Set(fallbackCandidates));
