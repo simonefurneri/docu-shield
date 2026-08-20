@@ -43,11 +43,11 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl sm:p-8"
+        className="relative my-auto w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-slate-200 bg-white p-5 sm:p-8 shadow-2xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
@@ -55,20 +55,20 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           type="button"
           onClick={onClose}
           aria-label="Chiudi modale"
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+          className="absolute right-3.5 top-3.5 sm:right-4 sm:top-4 z-10 rounded-lg bg-white/80 p-1.5 text-slate-400 backdrop-blur hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>
 
         {/* Header */}
-        <div className="text-center">
-          <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-            <Sparkles className="h-6 w-6" />
+        <div className="text-center pt-2 sm:pt-0">
+          <div className="mx-auto mb-2 sm:mb-3 inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+          <h2 className="text-xl font-bold text-slate-900 sm:text-3xl">
             Hai utilizzato la tua analisi gratuita
           </h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
+          <p className="mx-auto mt-1.5 sm:mt-2 max-w-lg text-xs sm:text-sm text-slate-600">
             Scegli il piano più adatto alle tue esigenze per continuare ad analizzare
             contratti, identificare criticità e garantire la conformità legale.
           </p>

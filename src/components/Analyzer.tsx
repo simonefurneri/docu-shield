@@ -303,7 +303,7 @@ export default function Analyzer() {
         </section>
 
         {/* ===== Upload form ===== */}
-        <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-8">
           <div className="grid gap-6 sm:grid-cols-2">
             {/* Drag & drop */}
             <div
@@ -318,7 +318,7 @@ export default function Analyzer() {
                 onFiles(e.dataTransfer.files);
               }}
               onClick={() => inputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+              className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 sm:p-8 text-center transition-colors overflow-hidden ${
                 drag
                   ? "border-indigo-500 bg-indigo-50"
                   : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"
@@ -334,15 +334,15 @@ export default function Analyzer() {
               />
               {file ? (
                 <>
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <FileText className="h-5 w-5 text-indigo-600" />
-                    <span className="max-w-[220px] truncate text-sm font-medium text-slate-800">
+                  <div className="flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <FileText className="h-5 w-5 text-indigo-600 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 text-left">
                       {file.name}
                     </span>
                     <button
                       type="button"
                       aria-label="Rimuovi file"
-                      className="cursor-pointer text-slate-400 transition-colors hover:text-red-500"
+                      className="cursor-pointer text-slate-400 transition-colors hover:text-red-500 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         setFile(null);
@@ -357,7 +357,7 @@ export default function Analyzer() {
                 </>
               ) : (
                 <>
-                  <UploadCloud className="h-10 w-10 text-indigo-500" />
+                  <UploadCloud className="h-10 w-10 text-indigo-500 shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-slate-700">
                       Trascina qui il documento
@@ -371,7 +371,7 @@ export default function Analyzer() {
             </div>
 
             {/* Controls */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 min-w-0">
               <div>
                 <label
                   htmlFor="check-type"
