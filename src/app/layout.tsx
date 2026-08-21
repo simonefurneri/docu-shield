@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-slate-50 text-slate-900">
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
