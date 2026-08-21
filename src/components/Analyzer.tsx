@@ -93,6 +93,17 @@ export default function Analyzer() {
           if (data.success) {
             setUnlockedSuccess(true);
             fetchUserStatus();
+
+            // Tracciamento conversione Google Ads (Acquisto)
+            if (typeof window !== "undefined" && typeof (window as unknown as { gtag?: Function }).gtag === "function") {
+              (window as unknown as { gtag: Function }).gtag("event", "conversion", {
+                send_to: "AW-18402729253/gwtJCK_SrOUcEKW6jcdE",
+                value: data.amount ?? 1.0,
+                currency: data.currency ?? "EUR",
+                transaction_id: data.transactionId ?? sessionId,
+              });
+            }
+
             window.history.replaceState(
               {},
               document.title,

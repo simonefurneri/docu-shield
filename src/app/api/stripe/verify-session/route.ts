@@ -28,10 +28,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const amount = session.amount_total ? session.amount_total / 100 : 1.0;
+    const currency = (session.currency || "EUR").toUpperCase();
+
     const res = NextResponse.json({
       success: true,
       isPro: true,
       message: "Sessione verificata con successo!",
+      amount,
+      currency,
+      transactionId: session.id,
     });
 
     // Imposta il cookie HTTP-only docushield_pro=true per sbloccare le analisi (durata 1 anno)
